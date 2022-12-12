@@ -1,0 +1,717 @@
+---
+title: "Case Study 2"
+output: html_notebook
+---
+
+# Introduction
+
+## Data 
+
+*Dataset:* CaseStudy2-data.csv
+
+*Columns Reference* 
+1. ID 
+2. Age
+3. Attrition 
+4. Business Travel 
+5. DailyRate
+6. Department 
+7. DistanceFromHome
+8. Education 
+9. EducationField
+10. EmployeeCount
+11. EmployeeNumber
+12. EnvironmentSatisfaction
+13. Gender
+14. HourlyRate
+
+# Preliminary Data Collection & Cleaning
+
+## Packages 
+```{r}
+library(tidyverse)
+library(dplyr)
+library(scales)
+library(ggplot2)
+library(inspectdf)
+library(kableExtra)
+library(DataExplorer)
+library(plyr)
+library(caret)
+library(e1071)
+library(ggthemes)
+```
+
+## Load Data
+```{r}
+# Import data
+df_raw = read.csv("Data/CaseStudy2-data.csv", header=TRUE, stringsAsFactors = TRUE)
+head(df_raw)
+
+# Validation data set with No Attrition 
+df_attr = read.csv("Data/CaseStudy2CompSet_No_Attrition.csv", header=TRUE, stringsAsFactors=TRUE)
+head(df_attr)
+
+# Validation data set with No Salary 
+df_salary = read.csv("Data/CaseStudy2CompSet_No_Salary.csv", header=TRUE, stringsAsFactors=TRUE)
+head(df_salary)
+
+dfAll = rbind.fill(df_raw, df_attr)
+dfAll = rbind.fill(dfAll, df_salary)
+head(dfAll)
+
+nrow(dfAll)
+```
+
+## Clean Data Set 
+
+### Missing data & Duplicates
+
+No missing values or duplicates in the data
+```{r}
+colSums(is.na(df_raw))
+df_raw[duplicated(df_raw),]
+
+```
+### Unique values for categorical variables
+```{r}
+
+df_raw %>% select_if(is.factor) %>%
+  summarise_all(~n_distinct(.)) %>% 
+  pivot_longer(., everything(), names_to = "columns", values_to = "count_unique_values") %>%
+  arrange(desc(count_unique_values))
+```
+Over 18 column only has 1 unique value therefore can be elimated from the data set
+
+```{r}
+str(df_raw)
+```
+### Remove Unnecessary Rows 
+- Over18, EmployeeCount, StandardHours all are constant so can be removed + remove EmployeeNumber & ID as they are purely for identification
+- Add AgeGroup column with different levels 
+- Create new column for AttritionCode with 0 and 1 factor levels (0=No, 1=Yes)
+
+Explore Structure of Data Set
+```{r}
+names(df_raw) # variable names 
+dim(df_raw) # data set dimensions
+str(df_raw) # data set structure
+summary(df_raw) # data set summary
+```
+
+```{r}
+dim(df_raw[df_raw$Over18 == "N",])
+dim(df_raw[df_raw$EmployeeCount != 1,])
+dim(df_raw[df_raw$StandardHours != 80,])
+
+# Create age groups 
+df$AgeGroup <- ""
+df[df$Age < 20, ]$AgeGroup <- "<20"
+df[df$Age >= 20 & df$Age < 30, ]$AgeGroup <- "20-29"
+df[df$Age >= 30 & df$Age < 40, ]$AgeGroup <- "30-39"
+df[df$Age >= 40 & df$Age < 50, ]$AgeGroup <- "40-49"
+df[df$Age >= 50 & df$Age < 60, ]$AgeGroup <- "50-59"
+df[df$Age >= 60, ]$AgeGroup <- "60+"
+df$AgeGroup <- factor(df$AgeGroup, level = c("<20", "20-29", "30-39", "40-49", "50-59", "60+"))
+
+
+head(df)
+
+# remove unnecessary columns
+df = subset(df_raw, select= -c(Over18,EmployeeCount,StandardHours, ID, EmployeeNumber) )
+glimpse(df)
+
+
+
+```
+
+## Inspect Categorical Levels
+```{r}
+library(inspectdf)
+inspect_cat(df)
+head(df_cat)
+df_cat$levels
+```
+
+## Create DataFrame with factors as numeric (for knn)
+```{r}
+df_num = df
+
+# BusinessTravel into (0-Non-Travel,1-Travel_Rarely,2-Travel_Frequently)
+df_num$BusinessTravel <- as.numeric(factor(df_num$BusinessTravel,
+                                                        levels = c("Travel_Frequently", "Travel_Rarely", "Non-Travel"),
+                                                        labels = c(2,1,0), ordered = TRUE))
+
+# Department into (0-Research&Development, 1-Sales, 2-Human Resources)
+df_num$Department <- as.numeric(factor(df_num$Department,
+                                                        levels = c("Research & Development", "Sales", "Human Resources"),
+                                                        labels = c(0,1,2), ordered = TRUE))
+
+# Education Field into (0-Life Sciences, 1-Medical, 2-Marketing, 3-Technical Degree, 4-Human Resources, 5-Other)
+df_num$EducationField <- as.numeric(factor(df_num$EducationField,
+                                                        levels = c("Life Sciences", "Medical", "Marketing", "Technical Degree", "Human Resources", "Other"),
+                                                        labels = c(0,1,2,3,4,5), ordered = TRUE))
+
+# Job Role into (0-Sales Executive, 1-Research Scientist, 2-Laboratory Technician, 3-Manufacturing Director, 4-Healthcare Representative, 5-Sales Representative, 6-Manager, 7-Research Director, 8-Human Resources) 
+df_num$JobRole <- as.numeric(factor(df_num$JobRole,
+                                                        levels = c("Sales Executive", "Research Scientist", "Laboratory Technician", "Manufacturing Director", "Healthcare Representative", "SalesRepresentative", "Manager", "Research Director", "Human Resources"),
+                                                        labels = c(0,1,2, 3, 4, 5, 6, 7, 8), ordered = TRUE))
+
+# MaritalStatus into (0-Divorced,1-Single,2-Married)
+df_num$MaritalStatus <- as.numeric(factor(df_num$MaritalStatus,
+                                                        levels = c("Married", "Single", "Divorced"),
+                                                        labels = c(2,1,0), ordered = TRUE))
+
+
+# create new column for Attrition factor levels
+#0 = No, 1 = Yes
+df_num$Attrition <- mapvalues(df_num$Attrition, from=c('Yes', 'No'), to = c(1,0))
+df_num$Attrition=as.numeric(df_num$Attrition)
+
+df_num$Gender <- mapvalues(df_num$Gender, from=c('Male', 'Female'), to = c(1,0))
+df_num$Gender=as.numeric(df_num$Gender)
+
+#0 = No, 1 = Yes
+df_num$OverTime <- mapvalues(df_num$OverTime, from=c('Yes', 'No'), to = c(1,0))
+df_num$OverTime=as.numeric(df_num$OverTime)
+
+head(df_num)
+```
+## Exploratory Data Analaysis 
+## Frequency of Categorical Levels
+```{r}
+df_cat = inspect_cat(df)
+show_plot(df_cat)
+```
+## Employee Attrition 
+For Attrition, 84% of the employees had "No" Attrition and 16% had "Yes" Attrition. 
+
+```{r}
+library(ggplot2)
+#install.packages("cowplot")
+library(cowplot)
+attritions_number <- df_raw %>% group_by(Attrition) %>% dplyr::summarise(Count=n()) %>% ggplot(aes(x=Attrition, y=Count)) + geom_bar(stat="identity", fill="orange", color="grey40") + theme_bw() + coord_flip() + geom_text(aes(x=Attrition, y=0.01, label= Count), hjust=-0.8, vjust=-1, size=3,  colour="black", fontface="bold", angle=360) + labs(title="Employee Attrition (Amount)", x="Employee Attrition",y="Amount") + scale_fill_few(palette = 'Dark')+ theme_few()
+
+attrition_percentage <- df %>% group_by(Attrition) %>% dplyr::summarise(Count=n()) %>% 
+mutate(pct=round(prop.table(Count),2) * 100) %>% 
+ggplot(aes(x=Attrition, y=pct)) + geom_bar(stat="identity", fill = "dodgerblue", color="grey40") + 
+geom_text(aes(x=Attrition, y=0.01, label= sprintf("%.2f%%", pct)),
+            hjust=0.5, vjust=-3, size=4, 
+            colour="black", fontface="bold") + theme_bw() + labs(x="Employee Attrition", y="Percentage") + 
+labs(title="Employee Attrition (%)") + scale_fill_few(palette = 'Dark')+ theme_few()
+
+
+
+plot_grid(attritions_number, attrition_percentage, align="h", ncol=2)
+```
+
+## Age & Attrition 
+```{r}
+ggplot(df, aes(x = Age, fill = Attrition)) + geom_histogram(color="black")+
+  labs(title="Age vs.Attirition",x="Attrition", y = "Monthly Income $")+ scale_fill_few(palette = 'Dark')+ theme_few()
+```
+
+## Monthly Income & Attrition
+```{r}
+# MonthlyIncome
+ggplot(df, aes(x=Attrition, y=MonthlyIncome, color=Attrition, fill= Attrition)) +
+  geom_boxplot( color = "black")+
+  labs(title="Monthly Income vs. Attrition",x="Attrition", y = "Monthly Income $")+ scale_fill_few(palette = 'Dark')+ theme_few()
+```
+## Job Involvement & Attrition 
+```{r}
+library(ggthemes)
+df %>% ggplot(aes(x = JobInvolvement, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() + 
+  scale_fill_few(palette = 'Dark')+ theme_few() +ggtitle("Job Involvement & Attrition")
+```
+
+### Job Involvement & Attrition based on OverTime
+```{r}
+df %>% ggplot(aes(x = JobInvolvement, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ OverTime) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() + ggtitle("Job Involvement & Attrition based on OverTime")
+```
+
+## Work-Life Balance & Attrition 
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() + ggtitle("Work-Life Balance & Attrition")
+```
+### Work-Life Balance & Attrition based on JobRole
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ JobRole) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Work-Life Balance & Attrition based on JobRole")
+```
+### Work-Life Balance & Attrition based on JobLevel 
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ JobLevel) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Work-Life Balance & Attrition based on JobLevel")
+```
+### Work-Life Balance & Attrition based on OverTime
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ OverTime) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Work-Life Balance & Attrition based on OverTime")
+```
+## OverTime & Attrition 
+```{r}
+df %>% ggplot(aes(x = OverTime, fill = Attrition)) +
+  geom_bar(position = 'fill', color = "black") +
+  coord_flip() + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Overtime & Attrition")
+```
+
+
+
+## Correlation Plots
+```{r}
+library(corrplot)
+
+corrplot(df_corr, method = "number",
+           type = "upper",
+           tl.cex = 0.7,
+           tl.srt = 80,
+           tl.col = "black")
+
+corrplot(M, method="circle", type="upper")
+
+head(df_corr)
+df_corr$levels
+```
+- JobLevel highly correlated with MonthlyIncome & TotalWorkingYears
+- Age & TotalWorkingYears highly correlated 
+- YearsAtCompany highly correlated with YearsInCurrentRole & YearsSinceLastPromotion & YearsWithCurrManager
+
+##  Feature Selection 
+```{r}
+library(caret)
+# Feature Selection
+# We need to find features which are important for the model.
+
+
+# prepare training scheme
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+# train the model
+model <- train(Attrition~., data=df, method="lvq", preProcess="scale", trControl=control)
+# estimate variable importance
+importance <- varImp(model, scale=FALSE)
+# summarize importance
+print(importance)
+# plot importance
+plot(importance)
+```
+- look at relationship between TotalWorkingYears + YearsAtCompany 
+- YearsInCurrentRoleYearsWithCurrManager
+
+### Ranked Cross-Validations 
+Here we look at the top 10  most relevant correlations between variables. 
+```{r}
+devtools::install_github("laresbernardo/lares")
+library(lares)
+
+corr_cross(df , # name of dataset
+  max_pvalue = 0.05, # display only significant correlations (at 5% level)
+  top = 10 # display top 10 couples of variables (by correlation coefficient)
+)
+```
+### Top Correlated Variables for Attrition & MonthlyIncome
+```{r}
+corr_var(df, Attrition, top=10)
+corr_var(df, MonthlyIncome, top=10)
+```
+
+## MonthlyIncome Relationships 
+```{r}
+head(df_num)
+```
+
+
+# Models 
+### Train/Test Split
+```{r}
+trainIndices = sample(seq(1:length(df$Age)),round(.7*length(df$Age)))
+train = df[trainIndices,]
+test = df[-trainIndices,]
+
+
+head(train)
+head(test)
+dim(train) 
+```
+
+```{r}
+# remove highly correlated variables 
+vars_use = subset(df, select = -c(YearsWithCurrManager, YearsInCurrentRole, MonthlyRate, HourlyRate , DailyRate )) 
+vars_use
+```
+
+## Linear Regression 
+
+
+
+
+## Linear Model for MonthlyIncome 
+### Model 1: Monthly Income & Job Level 
+```{r}
+#install.packages("Metrics")
+library(Metrics)
+fit_salary1 = lm(MonthlyIncome~JobLevel, data=train)
+summary(fit_salary1)
+
+preds_salary = predict(fit_salary1, test, interval="predict") 
+rmse(train$MonthlyIncome, preds_salary)
+
+plot(fit_salary1$residuals)
+
+ 
+
+```
+
+### Model 2: MonthlyIncome & JobLevel + TotalWorkingYears + JobRole
+
+```{r}
+
+fit_salary2 = lm(MonthlyIncome~JobLevel+TotalWorkingYears+JobRole+, data=train)
+summary(fit_salary2)
+sqrt(mean(fit_salary2$residuals^2)) #RMSE
+
+preds_salary2 = predict(fit_salary2, test, interval="predict") 
+#rmse(train$MonthlyIncome, preds_salary)
+plot(fit_salary2)
+```
+
+
+```{r}
+set.seed(1)
+splitPerc = .7
+iterations = 500
+masterRMSE = matrix(nrow = iterations, 1)
+
+  
+for(j in 1:iterations)
+{
+  trainIndices = sample(1:dim(df_lm)[1],round(splitPerc * nrow(df_lm)))
+  trainData = df_lm[trainIndices,]
+  testData = df_lm[-trainIndices,]
+
+
+  # linear model (after trying many combinations and ruling out variables that failed to improve RMSE and/or had high P values)
+  linearMod <- lm(trainData$MonthlyIncome~JobLevel+TotalWorkingYears+JobRole, data=trainData)
+  # 
+  summary(linearMod)
+  # now use it to predict the salary
+  
+  
+  pred = predict(linearMod, testData, inverval="predict")
+  
+  masterRMSE[j,1] = rmse(testData$MonthlyIncome, pred)
+}
+
+meanRMSE = colMeans(masterRMSE)
+meanRMSE
+```
+
+## Linear Model for Attrition
+```{r}
+df_lm$Attrition = as.numeric(df_lm$Attrition)
+```
+
+
+```{r}
+
+library(car)
+
+# Linear regression model on all variables 
+fit1 = lm(Attrition ~ OverTime , data=train_num)
+summary(fit1)
+sqrt(mean(fit1$residuals^2)) #RMSE
+#vif(fit1)
+preds1 = predict(fit1, test_num, interval="predict") 
+preds1
+rmse(train_num$Attrition, preds1)
+
+hist(fit1$residuals, col = "blue", main = "Histogram of Residuals")
+plot(fit1$fitted.values,fit1$residuals, main = "Plot of Residuals v. Fitted Values")
+
+
+ # Linear regression model on all variables 
+fit2 = lm(Attrition ~ ., data=df_lm)
+summary(fit2)
+vif(fit2)
+hist(fit2$residuals, col = "blue", main = "Histogram of Residuals")
+plot(fit2$fitted.values,fit2$residuals, main = "Plot of Residuals v. Fitted Values")
+sqrt(mean(fit2$residuals^2)) #RMSE
+
+ # Linear regression model on all variables 
+fit3 = lm(Attrition ~ OverTime + StockOptionLevel + MaritalStatus + JobSatisfaction + JobLevel + MonthlyIncome , data=df_lm)
+summary(fit3)
+vif(fit2)
+hist(fit2$residuals, col = "blue", main = "Histogram of Residuals")
+plot(fit2$fitted.values,fit2$residuals, main = "Plot of Residuals v. Fitted Values")
+sqrt(mean(fit3$residuals^2)) #RMSE
+
+```
+
+
+
+
+```{r}
+
+fit4 = lm(Attrition ~ BusinessTravel + Education + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance  + Age + DistanceFromHome + OverTime , data=df_lm)
+summary(fit4)
+vif(fit4)
+hist(fit4$residuals, col = "blue", main = "Histogram of Residuals")
+plot(fit4$fitted.values,fit2$residuals, main = "Plot of Residuals v. Fitted Values")
+sqrt(mean(fit4$residuals^2)) #RMSE
+
+
+
+```
+
+```{r}
+set.seed(1)
+splitPerc = .7
+iterations = 50
+thresholdValues = seq(0,1,0.01)
+thresholdIterations = length(thresholdValues)
+masterAcc = matrix(nrow = iterations, ncol=thresholdIterations)
+masterSpec = matrix(nrow = iterations, ncol=thresholdIterations)
+masterSens = matrix(nrow = iterations, ncol=thresholdIterations)
+masterCombined = matrix(nrow = iterations, ncol=thresholdIterations)
+
+
+for(j in 1:iterations)
+{
+  
+  trainIndices = sample(1:dim(df_num)[1],round(splitPerc * nrow(df_num)))
+  trainData = df_num[trainIndices,]
+  testData = df_num[-trainIndices,]
+  
+
+  fit <- lm(Attrition ~ BusinessTravel + Education + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime, data=trainData) 
+  
+
+  pred = predict(fit, testData, inverval="predict", type = "response")
+  
+  for (i in 1:length(thresholdValues))
+  {
+  
+    pred <- ifelse(pred > thresholdValues[i], "Yes", "No")
+  
+    pred <- as.factor(pred)
+  
+    levels(pred) = levels(testData$Attrition)
+    CM = confusionMatrix(table(pred, as.factor(testData$Attrition)),positive="Yes")
+    masterAcc[j,i] = CM$overall[1]
+    masterSens[j,i] = CM$byClass[1][[1]] # sensitivity
+    masterSpec[j,i] = CM$byClass[2][[1]] # specificity
+    masterCombined[j,i] =  CM$byClass[1][[1]] + CM$byClass[2][[1]] # combined
+  }
+}
+# all the rows in the same column have the same threshold value, so average across the column to get the average for threshold
+MeanAcc = colMeans(masterAcc)
+
+plot(seq(1,thresholdIterations,1),MeanAcc, type = "l", xlab = "Threshold", ylab="Accuracy")
+
+```
+
+
+
+
+
+## KNN 
+
+```{r}
+# Using all variables
+noAttrition_df = df[df$Attrition == 'No',]
+yesAttrition_df= df[df$Attrition == 'Yes',]
+
+trainingPercent = nrow(yesAttrition_df) / nrow(noAttrition_df)
+
+trainingIndicies = sample(1:dim(noAttrition_df)[1], round(trainingPercent * dim(noAttrition_df)[1]))
+train = rbind(noAttrition_df[trainingIndicies,], yesAttrition_df)
+       
+head(train)
+#head(test)
+#Train Control ... Repeated 10 fold CV
+ctrl <- trainControl(method="repeatedcv")
+
+knn_model1 <-train(Attrition ~ .,data=train, method="knn", trControl = ctrl, preProcess = c("center","scale"), tuneLength = 20)
+
+knn_pred1 = predict(knn_model1, df)
+CM= confusionMatrix(table(knn_pred1, df$Attrition), positive = "Yes")
+CM
+
+```
+```{r}
+# Using all variables
+noAttrition_df = df[df$Attrition == 'No',]
+yesAttrition_df= df[df$Attrition == 'Yes',]
+
+trainingPercent = nrow(yesAttrition_df) / nrow(noAttrition_df)
+
+trainingIndicies = sample(1:dim(noAttrition_df)[1], round(trainingPercent * dim(noAttrition_df)[1]))
+train = rbind(noAttrition_df[trainingIndicies,], yesAttrition_df)
+       
+head(train)
+#head(test)
+#Train Control ... Repeated 10 fold CV
+ctrl <- trainControl(method="repeatedcv")
+
+knn_model2 <-train(Attrition ~ OverTime+EnvironmentSatisfaction+NumCompaniesWorked+Age+JobInvolvement+MonthlyIncome+MaritalStatus+StockOptionLevel,data=train, method="knn", trControl = ctrl, preProcess = c("center","scale"), tuneLength = 20)
+
+knn_pred2 = predict(knn_model2, df)
+CM= confusionMatrix(table(knn_pred2, df$Attrition), positive = "Yes")
+CM
+
+```
+
+
+```{r}
+
+noAttrition_df = df[df$Attrition == 'No',]
+yesAttrition_df= df[df$Attrition == 'Yes',]
+
+trainingPercent = nrow(yesAttrition_df) / nrow(noAttrition_df)
+
+trainingIndicies = sample(1:dim(noAttrition_df)[1], round(trainingPercent * dim(noAttrition_df)[1]))
+train_knn = rbind(noAttrition_df[trainingIndicies,], yesAttrition_df)
+       
+
+# validate train and test sets
+head(train_knn)
+
+# control settings for KNN
+# NOTE: needed in order to focus on specificity
+
+traincontrol_knn = trainControl(
+  method = "repeatedcv",
+  number = 5,
+  repeats = 25,
+  summaryFunction = twoClassSummary,
+  classProbs = TRUE
+)
+
+# KNN on Training Set
+
+knn_model <- train(Attrition ~ ., data = train_knn, method = "knn", metric = "Spec",  trControl = traincontrol_knn,  
+                       preProcess = c("center","scale"), tuneLength = 20)
+
+#Test
+# Adding predictions to Test Data
+knn_pred = predict(knn_model,newdata = test )
+
+CM= confusionMatrix(table(knn_pred, test$Attrition), positive = "Yes")
+CM
+```
+
+```{r}
+# predictions for whole data set 
+knn_pred = predict(knn_model, df)
+CM= confusionMatrix(table(knn_pred, df$Attrition), positive = "Yes")
+CM
+```
+
+##  NAIVE BAYES
+
+
+
+
+```{r}
+library(class)
+
+trainingPercent = nrow(yesAttrition_df) / nrow(noAttrition_df)
+
+trainingIndicies = sample(1:dim(noAttrition_df)[1], round(trainingPercent * dim(noAttrition_df)[1]))
+train_nb = rbind(noAttrition_df[trainingIndicies,], yesAttrition_df)
+
+nb_model1 = naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime , data = train_nb)
+summary(nb_model)
+#table(nb,test$Age)
+nb_pred1 = predict(nb_model, df)
+CM= confusionMatrix(table(nb_pred1, df$Attrition), positive = "Yes")
+CM
+#cor(df$JobInvolvement, df$EnvironmentSatisfaction)
+```
+
+```{r}
+nb_model2= naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime,data = train_nb)
+summary(nb_model2)
+
+nb_pred2 = predict(nb_model2, df)
+CM= confusionMatrix(table(nb_pred2, df$Attrition), positive = "Yes")
+CM
+```
+
+```{r}
+set.seed(1)
+splitPerc = .7
+iterations = 50
+masterAcc = matrix(nrow = iterations, ncol = 1)
+masterSpec = matrix(nrow = iterations, ncol = 1)
+masterSens = matrix(nrow = iterations, ncol = 1)
+  
+for(j in 1:iterations)
+{
+  trainIndices = sample(1:dim(train)[1],round(splitPerc * nrow(train)))
+  trainData = train[trainIndices,]
+  testData = train[-trainIndices,]
+  modelBayes = naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime,data = trainData)
+  predictAttrBayes = predict(modelBayes, testData)
+  CM = confusionMatrix(table(predictAttrBayes, as.factor(testData$Attrition)),positive="Yes")
+  
+  masterAcc[j,1] = CM$overall[1]
+  masterSens[j,1] = CM$byClass[1][[1]] # sensitivity
+  masterSpec[j,1] = CM$byClass[2][[1]] # specificity
+}
+MeanAcc = colMeans(masterAcc)
+MeanAcc
+MeanSens = colMeans(masterSens)
+MeanSens
+MeanSpec = colMeans(masterSpec)
+MeanSpec
+CM
+
+predictAttrBayes = predict(modelBayes, df)
+CM = confusionMatrix(table(predictAttrBayes, as.factor(df$Attrition)),positive="Yes")
+CM
+
+```
+
+## Validation Requirement for Salary 
+```{r}
+fit_salary_val = lm(MonthlyIncome~JobLevel+TotalWorkingYears+JobRole, data=df)
+pred_salary_val = predict(fit_salary_val, df_salary)
+summary(fit_salary_val)
+
+MonthlyIncome = pred_salary_val 
+MonthlyIncome = as.data.frame(MonthlyIncome)
+salary_pred = cbind(df_salary, MonthlyIncome)
+
+write.csv(salary_pred, "CarolinaCrausCase2PredictionsSalary.csv", row.names = FALSE)
+case2nosalary3 <- read.csv("CarolinaCrausCase2PredictionsSalary.csv", header = T)
+head(case2nosalary3)
+
+
+```
+

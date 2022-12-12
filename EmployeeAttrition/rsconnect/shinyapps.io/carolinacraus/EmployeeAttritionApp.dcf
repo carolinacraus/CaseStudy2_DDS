@@ -1,0 +1,13 @@
+name: EmployeeAttritionApp
+title: EmployeeAttritionApp
+username:
+account: carolinacraus
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 7872735
+bundleId: 6626344
+url: https://carolinacraus.shinyapps.io/EmployeeAttritionApp/
+when: 1670837369.59363
+lastSyncTime: 1670837369.59364
+asMultiple: FALSE
+asStatic: FALSE

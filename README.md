@@ -1,2 +1,5 @@
-# CaseStudy2_DDS
-Case Study #2: Talent Management Analysis
+# Case Study #2: Talent Management Analysis
+
+**[RShiny App](https://carolinacraus.shinyapps.io/EmployeeAttritionApp/)**
+
+## Files 

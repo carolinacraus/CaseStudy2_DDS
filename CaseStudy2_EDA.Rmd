@@ -1,0 +1,122 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+ 
+
+```{r}
+# Import data
+df_raw = read.csv("Data/CaseStudy2-data.csv", header=TRUE, stringsAsFactors = TRUE)
+head(df_raw)
+```
+# Exploratory Data Analysis 
+
+
+## Monthly Income & Attrition
+```{r}
+# MonthlyIncome
+ggplot(df, aes(x=Attrition, y=MonthlyIncome, color=Attrition, fill= Attrition)) +
+  geom_boxplot( color = "black")+
+  labs(title="Monthly Income vs. Attrition",x="Attrition", y = "Monthly Income $")+ scale_fill_few(palette = 'Dark')+ theme_few()
+```
+## Job Involvement & Attrition 
+```{r}
+library(ggthemes)
+df %>% ggplot(aes(x = JobInvolvement, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() + 
+  scale_fill_few(palette = 'Dark')+ theme_few() +ggtitle("Job Involvement & Attrition")
+```
+
+### Job Involvement & Attrition based on OverTime
+```{r}
+df %>% ggplot(aes(x = JobInvolvement, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ OverTime) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() + ggtitle("Job Involvement & Attrition based on OverTime")
+```
+## Work-Life Balance & Attrition 
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() + ggtitle("Work-Life Balance & Attrition")
+```
+### Work-Life Balance & Attrition based on JobRole
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ JobRole) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Work-Life Balance & Attrition based on JobRole")
+```
+### Work-Life Balance & Attrition based on JobLevel 
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ JobLevel) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Work-Life Balance & Attrition based on JobLevel")
+```
+### Work-Life Balance & Attrition based on OverTime
+```{r}
+df %>% ggplot(aes(x = WorkLifeBalance, fill = Attrition)) +
+  geom_bar(position = 'fill', color="black") +
+  coord_flip() +
+  facet_wrap( ~ OverTime) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +ggtitle("Work-Life Balance & Attrition based on OverTime")
+```
+## OverTime & Attrition 
+```{r}
+df %>% ggplot(aes(x = OverTime, fill = Attrition)) +
+  geom_bar(position = 'fill') +
+  coord_flip() + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few()
+```
+### OverTime & Attrition based on Job Role
+```{r}
+df %>% ggplot(aes(x = OverTime, fill = Attrition)) +
+  geom_bar(position = 'fill') +
+  coord_flip() +
+  facet_wrap( ~ JobRole) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few()
+```
+### OverTime & Attrition based on Job Level
+```{r}
+df %>% ggplot(aes(x = OverTime, fill = Attrition)) +
+  geom_bar(position = 'fill') +
+  coord_flip() +
+  facet_wrap( ~ JobLevel) + 
+  scale_fill_few(palette = 'Dark') + 
+  theme_few()
+
+```
+### OverTime & Attrition based on MonthlyIncome
+```{r}
+train %>% 
+  ggplot(aes(x = Attrition,
+             y = MonthlyIncome,
+             fill = Attrition)) +
+  geom_boxplot() + 
+  facet_wrap(~ OverTime) +
+  scale_fill_few(palette = 'Dark') + 
+  theme_few() +
+  ggtitle('MonthlyIncome by Attrition and Overtime')
+```
+
+
+
+
+
+
+
+
