@@ -5,9 +5,13 @@ output: html_notebook
 
 # Introduction
 
+DDSAnalytics is an analytics company that specializes in talent management solutions for Fortune 100 companies. Talent management is defined as the iterative process of developing and retaining employees. It may include workforce planning, employee training programs, identifying high-potential employees and reducing/preventing voluntary employee turnover (attrition). To gain a competitive edge over its competition, DDSAnalytics is planning to leverage data science for talent management. The executive leadership has identified predicting employee turnover as its first application of data science for talent management. Before the business green lights the project, they have tasked your data science team to conduct an analysis of existing employee data. 
+
 ## Data 
 
-*Dataset:* CaseStudy2-data.csv
+- **CaseStudy2-data/csv**
+- **CaseStudy2CompSet_No_Attrition.csv**
+- **CaseStudy2CompSet_No_Salary.csv**
 
 *Columns Reference* 
 1. ID 
@@ -614,14 +618,14 @@ traincontrol_knn = trainControl(
 
 # KNN on Training Set
 
-knn_model <- train(Attrition ~ ., data = train_knn, method = "knn", metric = "Spec",  trControl = traincontrol_knn,  
+knn_model <- train(Attrition ~ OverTime+EnvironmentSatisfaction+NumCompaniesWorked+Age+JobInvolvement+MonthlyIncome+MaritalStatus+StockOptionLevel, data = train_knn, method = "knn", metric = "Spec",  trControl = traincontrol_knn,  
                        preProcess = c("center","scale"), tuneLength = 20)
 
 #Test
 # Adding predictions to Test Data
-knn_pred = predict(knn_model,newdata = test )
+knn_pred = predict(knn_model, df$Attrition )
 
-CM= confusionMatrix(table(knn_pred, test$Attrition), positive = "Yes")
+CM= confusionMatrix(table(knn_pred, df$Attrition), positive = "Yes")
 CM
 ```
 
@@ -655,7 +659,7 @@ CM
 ```
 
 ```{r}
-nb_model2= naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime,data = train_nb)
+nb_model2= naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime +StockOptionLevel,data = train_nb)
 summary(nb_model2)
 
 nb_pred2 = predict(nb_model2, df)
@@ -676,7 +680,7 @@ for(j in 1:iterations)
   trainIndices = sample(1:dim(train)[1],round(splitPerc * nrow(train)))
   trainData = train[trainIndices,]
   testData = train[-trainIndices,]
-  modelBayes = naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + JobRole + Age + DistanceFromHome + OverTime,data = trainData)
+  modelBayes = naiveBayes(Attrition~BusinessTravel + EnvironmentSatisfaction + JobLevel + JobRole + NumCompaniesWorked + WorkLifeBalance + StockOptionLevel+ Age + DistanceFromHome + OverTime,data = trainData)
   predictAttrBayes = predict(modelBayes, testData)
   CM = confusionMatrix(table(predictAttrBayes, as.factor(testData$Attrition)),positive="Yes")
   
@@ -712,6 +716,22 @@ write.csv(salary_pred, "CarolinaCrausCase2PredictionsSalary.csv", row.names = FA
 case2nosalary3 <- read.csv("CarolinaCrausCase2PredictionsSalary.csv", header = T)
 head(case2nosalary3)
 
+
+```
+
+## Validation Requirement for Attrition 
+```{r}
+
+pred_attr_val = predict(knn_model, df_attr)
+summary(fit_salary_val)
+
+Attrition = pred_attr_val
+MontAttritionhlyIncome = as.data.frame(Attrition)
+attr_pred = cbind(df_salary, Attrition)
+
+write.csv(attr_pred, "CarolinaCrausCase2PredictionsAttritionKNN.csv", row.names = FALSE)
+case2noattr3 <- read.csv("CarolinaCrausCase2AttritionKNN.csv", header = T)
+head(case2noattr3)
 
 ```
 
